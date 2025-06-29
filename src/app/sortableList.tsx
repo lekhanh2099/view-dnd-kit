@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useMemo, useCallback, useRef } from "react";
 import {
  DndContext,
@@ -12,19 +11,14 @@ import {
  DragStartEvent,
  DragOverEvent,
  DragEndEvent,
- Active,
- Over,
+ useDraggable,
+ useDroppable,
 } from "@dnd-kit/core";
-import {
- arrayMove,
- SortableContext,
- sortableKeyboardCoordinates,
- verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+ restrictToVerticalAxis,
+ restrictToWindowEdges,
+} from "@dnd-kit/modifiers";
 
 interface View {
  id: string;
@@ -53,7 +47,10 @@ interface DragData {
 
 interface ActiveItem {
  type: string;
- item: View | Group;
+ item: {
+  view?: View;
+  group?: Group;
+ };
 }
 
 const DRAG_TYPES = {
@@ -131,12 +128,10 @@ const getMockData = (): Group[] => [
   enabled: true,
   isFakeGroup: false,
  },
- createFakeGroup(4),
 ];
 
 function rebuildGroupsWithFake(groups: Group[]): Group[] {
  const realGroups = groups.filter((g) => !g.isFakeGroup);
-
  const newGroups: Group[] = [];
 
  newGroups.push(createFakeGroup(0));
@@ -149,52 +144,92 @@ function rebuildGroupsWithFake(groups: Group[]): Group[] {
  return newGroups.map((group, index) => ({ ...group, groupIdx: index }));
 }
 
-interface SortableViewProps {
- view: View;
- groupEnabled?: boolean;
+function arrayMove<T>(array: T[], from: number, to: number): T[] {
+ const newArray = [...array];
+ const item = newArray.splice(from, 1)[0];
+ newArray.splice(to, 0, item);
+ return newArray;
 }
 
-const SortableView = React.memo<SortableViewProps>(
- ({ view, groupEnabled = true }) => {
-  const {
-   attributes,
-   listeners,
-   setNodeRef,
-   transform,
-   transition,
-   isDragging,
-  } = useSortable({
+interface DraggableViewProps {
+ view: View;
+ isDraggedOver?: boolean;
+ activeItem?: ActiveItem;
+ dragOverId?: string | null;
+ activeId?: string | null;
+ viewIndex?: number;
+ activeViewIndex?: number;
+ isDropTarget?: boolean;
+}
+
+const DraggableView = React.memo<DraggableViewProps>(
+ ({ view, activeItem, isDropTarget }) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+   useDraggable({
+    id: view.id,
+    data: { type: DRAG_TYPES.VIEW, view } satisfies DragData,
+   });
+
+  const { setNodeRef: setDropRef } = useDroppable({
    id: view.id,
    data: { type: DRAG_TYPES.VIEW, view } satisfies DragData,
   });
 
+  const shouldAnimateUp = isDropTarget && activeItem?.type === DRAG_TYPES.VIEW;
+
   const style = useMemo(
    () => ({
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
+    transform: transform
+     ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+     : undefined,
+    opacity: isDragging ? 0 : 1,
+    zIndex: isDragging ? 1000 : 1,
    }),
-   [transform, transition, isDragging]
+   [transform, isDragging]
   );
-
-  const isDisabled = !groupEnabled || !view.enabled;
 
   return (
    <div
-    ref={setNodeRef}
+    ref={(node) => {
+     setNodeRef(node);
+     setDropRef(node);
+    }}
     style={style}
-    className={`bg-white border border-gray-200 rounded-lg p-4 mb-3 ${
-     isDisabled ? "opacity-50" : ""
-    }`}
+    className={`
+      bg-white border-2 rounded-lg p-4 mb-3 
+      transition-all duration-300 ease-out
+      ${shouldAnimateUp ? "transform translate-y-16" : ""}
+      ${
+       isDropTarget && !shouldAnimateUp
+        ? "border-blue-400 bg-blue-50 -translate-y-16"
+        : ""
+      }
+    `}
    >
-    <div className="flex items-center justify-between mb-3">
-     <p className="text-red-500 rounded-sm flex-shrink-0">{view.columnId}</p>
+    <div className="flex items-center justify-between">
+     <div className="flex items-center gap-2">
+      <div
+       className={`w-3 h-3 rounded-sm flex-shrink-0 transition-all duration-200 ${
+        isDropTarget ? "bg-blue-500 animate-pulse" : "bg-red-500"
+       }`}
+      ></div>
+      <p
+       className={`font-medium text-sm transition-colors duration-200 ${
+        isDropTarget ? "text-blue-800" : "text-gray-800"
+       }`}
+      >
+       {view.columnId}
+      </p>
+     </div>
      <div
       {...attributes}
       {...listeners}
-      className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
+      className={`
+        cursor-grab active:cursor-grabbing p-2 rounded
+        transition-all duration-200 ease-out text-gray-400
+      `}
      >
-      <GripVertical size={14} />
+      <GripVertical size={16} />
      </div>
     </div>
    </div>
@@ -202,124 +237,138 @@ const SortableView = React.memo<SortableViewProps>(
  }
 );
 
-SortableView.displayName = "SortableView";
+DraggableView.displayName = "DraggableView";
 
-interface SortableGroupProps {
+interface DraggableGroupProps {
  group: Group;
  children: React.ReactNode;
  isDropTarget?: boolean;
+ isDraggedOver?: boolean;
+ isBeingDragged?: boolean;
+ activeItem?: ActiveItem;
+ dragOverId?: string | null;
+ activeId?: string | null;
+ activeViewIndex?: number;
 }
 
-const SortableGroup = React.memo<SortableGroupProps>(
- ({ group, children, isDropTarget = false }) => {
-  const {
-   attributes,
-   listeners,
-   setNodeRef,
-   transform,
-   transition,
-   isDragging,
-   isOver,
-  } = useSortable({
+const DraggableGroup = React.memo<DraggableGroupProps>(
+ ({
+  group,
+  children,
+  isDropTarget = false,
+  isDraggedOver = false,
+  activeItem,
+ }) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+   useDraggable({
+    id: group.groupId,
+    data: { type: DRAG_TYPES.GROUP, group } satisfies DragData,
+   });
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
    id: group.groupId,
    data: { type: DRAG_TYPES.GROUP, group } satisfies DragData,
   });
 
   const style = useMemo(
    () => ({
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.7 : 1,
+    opacity: isDragging ? 0 : 1,
+    zIndex: isDragging ? 1000 : 1,
+    transform: transform
+     ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+     : !isDragging
+     ? ""
+     : undefined,
    }),
-   [transform, transition, isDragging]
+   [transform, isDragging]
   );
+  console.log("This is something", { group });
 
-  // Render fake groups as drop zones
   if (group.isFakeGroup) {
+   const showDropZone = isOver || isDraggedOver;
+
    return (
     <div
-     ref={setNodeRef}
-     className={`transition-all duration-200 ${
-      isOver
-       ? "h-16 border-2 border-dashed border-blue-400 bg-blue-50 rounded-lg mb-4 flex items-center justify-center"
-       : "h-2 mb-2"
-     }`}
+     ref={(node) => {
+      setNodeRef(node);
+      setDropRef(node);
+     }}
+     className="transition-all duration-300 ease-out w-full"
     >
-     {isOver && (
-      <div className="text-blue-600 font-medium text-sm">
-       Drop here to create new group
+     {showDropZone && activeItem && (
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-dashed border-blue-300 rounded-lg p-4 mb-3 transition-all duration-300 animate-pulse">
+       <div className="flex items-center justify-center">
+        <div className="flex items-center gap-2 opacity-70">
+         <div className="w-3 h-3 bg-blue-500 rounded-sm flex-shrink-0 animate-bounce"></div>
+         <p className="text-blue-700 font-medium text-sm">
+          Drop here to create new group
+         </p>
+        </div>
+       </div>
       </div>
      )}
     </div>
    );
   }
 
-  const borderClasses = useMemo(() => {
-   if (isDropTarget) return "border-green-400 bg-green-50";
-   if (isOver) return "border-blue-300 bg-blue-50";
-   return "border-gray-200";
-  }, [isDropTarget, isOver]);
-
   return (
    <div
-    ref={setNodeRef}
+    ref={(node) => {
+     setNodeRef(node);
+     setDropRef(node);
+    }}
     style={style}
-    className={`border-2 rounded-lg p-4 mb-4 bg-gray-50 relative ${borderClasses} ${
-     !group.enabled ? "opacity-60" : ""
-    }`}
+    className={`
+      border-2 rounded-lg p-6 mb-6 bg-gray-50 relative
+      transition-all duration-300 ease-out
+      ${!group.enabled ? "opacity-60" : ""}
+      
+      ${isDragging ? "shadow-2xl" : ""}
+      ${isDropTarget ? "border-green-400 bg-green-50" : ""}
+    `}
    >
-    {/* Drop indicator for group merging */}
-    {isDropTarget && (
-     <div className="absolute inset-0 border-2 border-dashed border-green-400 rounded-lg bg-green-50 bg-opacity-50 flex items-center justify-center z-10">
-      <div className="text-green-600 font-medium text-sm bg-white px-3 py-1 rounded-md shadow">
-       Merge groups here
-      </div>
-     </div>
-    )}
-
     <div className="flex items-center justify-between mb-4">
      <div className="flex items-center gap-4">
-      <h3 className="font-semibold text-purple-600 text-sm">
+      <h3
+       className={`font-semibold text-sm uppercase tracking-wide transition-colors duration-200 ${
+        isDropTarget ? "text-green-700" : "text-purple-700"
+       }`}
+      >
        {group.title} ({group.views.length} items)
       </h3>
      </div>
      <div
       {...attributes}
       {...listeners}
-      className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 ml-2"
+      className={`
+        cursor-grab active:cursor-grabbing p-2 rounded
+        transition-all duration-200 ease-out text-gray-400
+      `}
      >
-      <GripVertical size={16} />
+      <GripVertical size={18} />
      </div>
     </div>
-
-    <SortableContext
-     items={group.views.map((v) => v.id)}
-     strategy={verticalListSortingStrategy}
-    >
-     {children}
-    </SortableContext>
+    <div className="transition-all duration-300 ease-out">{children}</div>
    </div>
   );
  }
 );
 
-SortableGroup.displayName = "SortableGroup";
+DraggableGroup.displayName = "DraggableGroup";
 
 const App: React.FC = () => {
  const [groups, setGroups] = useState<Group[]>(getMockData);
  const [activeId, setActiveId] = useState<string | null>(null);
  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
+ const [overId, setOverId] = useState<string | null>(null);
 
  const activeIdRef = useRef<string | null>(null);
- const dragStartTime = useRef<number | null>(null);
 
  const sensors = useSensors(
   useSensor(PointerSensor, {
    activationConstraint: { distance: 8 },
   }),
-  useSensor(KeyboardSensor, {
-   coordinateGetter: sortableKeyboardCoordinates,
-  })
+  useSensor(KeyboardSensor)
  );
 
  const { groupIds, viewIds, allItems } = useMemo(() => {
@@ -377,7 +426,6 @@ const App: React.FC = () => {
      const newGroupId = generateId();
      let newGroups = [...prev];
 
-     // Remove view from current group
      const activeGroupIndex = newGroups.findIndex((group) =>
       group.views.some((view) => view.id === activeView.id)
      );
@@ -391,7 +439,6 @@ const App: React.FC = () => {
       };
      }
 
-     // Create new group
      const newGroup: Group = {
       groupId: newGroupId,
       groupIdx: dropZoneIndex,
@@ -401,7 +448,6 @@ const App: React.FC = () => {
       isFakeGroup: false,
      };
 
-     // Replace the fake group
      const targetFakeGroupIndex = newGroups.findIndex(
       (g) => g.isFakeGroup && g.groupIdx === dropZoneIndex
      );
@@ -427,7 +473,6 @@ const App: React.FC = () => {
   (sourceGroupId: string, targetGroupId: string): void => {
    try {
     setGroups((prev) => {
-     // Clone the groups
      const newGroups = [...prev];
      const sourceIndex = newGroups.findIndex(
       (g) => g.groupId === sourceGroupId
@@ -471,12 +516,32 @@ const App: React.FC = () => {
    const { active } = event;
    setActiveId(active.id as string);
    activeIdRef.current = active.id as string;
-   dragStartTime.current = Date.now();
    setDragOverGroup(null);
+   setOverId(null);
   } catch (error) {
    console.error("Error in drag start:", error);
   }
  }, []);
+
+ const handleDragOver = useCallback(
+  (event: DragOverEvent): void => {
+   const { active, over } = event;
+
+   if (!over) {
+    setOverId(null);
+    setDragOverGroup(null);
+    return;
+   }
+
+   setOverId(over.id as string);
+
+   const overContainer = findContainer(over.id as string);
+   if (overContainer) {
+    setDragOverGroup(overContainer);
+   }
+  },
+  [findContainer, overId]
+ );
 
  const handleDragEnd = useCallback(
   (event: DragEndEvent): void => {
@@ -486,6 +551,7 @@ const App: React.FC = () => {
     if (!over || !active) {
      setActiveId(null);
      setDragOverGroup(null);
+     setOverId(null);
      activeIdRef.current = null;
      return;
     }
@@ -522,7 +588,7 @@ const App: React.FC = () => {
      }
     }
 
-    // Handle View dragging (ENHANCED WITH VIEW-TO-GROUP SUPPORT)
+    // Handle View dragging
     if (activeData?.type === DRAG_TYPES.VIEW && activeData.view) {
      const overContainer = findContainer(over.id as string);
      const activeContainer = findContainer(active.id as string);
@@ -532,9 +598,8 @@ const App: React.FC = () => {
      if (targetGroup?.isFakeGroup) {
       createNewGroupWithView(activeData.view, targetGroup.groupIdx);
      }
-     // Case 2: NEW - Dragging view to a different real group
+     // Case 2: Dragging view to a different group
      else if (
-      overData?.type === DRAG_TYPES.GROUP &&
       overContainer &&
       activeContainer &&
       overContainer !== activeContainer
@@ -581,10 +646,29 @@ const App: React.FC = () => {
          views: sourceGroupData.views.filter((v) => v.id !== active.id),
         };
 
-        // Add view to target group
+        // Determine insertion position
+        let insertionIndex = targetGroupData.views.length; // Default to end
+
+        if (overData?.type === DRAG_TYPES.VIEW && over.id !== active.id) {
+         // Dropping on a specific view
+         const targetViewIndex = targetGroupData.views.findIndex(
+          (v) => v.id === over.id
+         );
+         if (targetViewIndex !== -1) {
+          insertionIndex = targetViewIndex;
+         }
+        } else {
+         // Dropping on group container or empty space
+         insertionIndex = targetGroupData.views.length;
+        }
+
+        // Insert at the calculated position
+        const newViews = [...targetGroupData.views];
+        newViews.splice(insertionIndex, 0, viewToMove);
+
         newGroups[targetGroupIndex] = {
          ...targetGroupData,
-         views: [...targetGroupData.views, viewToMove],
+         views: newViews,
         };
 
         // Filter out empty groups and rebuild with fake groups
@@ -607,13 +691,17 @@ const App: React.FC = () => {
 
        if (!container) return prev;
 
-       const oldIndex = container.views.findIndex((v) => v.id === active.id);
-       const newIndex = container.views.findIndex((v) => v.id === over.id);
+       const activeIndex = container.views.findIndex((v) => v.id === active.id);
+       const overIndex = container.views.findIndex((v) => v.id === over.id);
 
-       if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+       if (
+        activeIndex !== -1 &&
+        overIndex !== -1 &&
+        activeIndex !== overIndex
+       ) {
         newGroups[containerIndex] = {
          ...container,
-         views: arrayMove(container.views, oldIndex, newIndex),
+         views: arrayMove(container.views, activeIndex, overIndex),
         };
        }
 
@@ -624,12 +712,13 @@ const App: React.FC = () => {
 
     setActiveId(null);
     setDragOverGroup(null);
+    setOverId(null);
     activeIdRef.current = null;
    } catch (error) {
     console.error("Error in drag end:", error);
-    // Ensure cleanup even on error
     setActiveId(null);
     setDragOverGroup(null);
+    setOverId(null);
     activeIdRef.current = null;
    }
   },
@@ -640,10 +729,10 @@ const App: React.FC = () => {
   if (!activeId) return null;
 
   const group = findGroup(activeId);
-  if (group) return { type: DRAG_TYPES.GROUP, item: group };
+  if (group) return { type: DRAG_TYPES.GROUP, item: { group } };
 
   const view = findViewById(activeId);
-  if (view) return { type: DRAG_TYPES.VIEW, item: view };
+  if (view) return { type: DRAG_TYPES.VIEW, item: { view } };
 
   return null;
  }, [activeId, findGroup, findViewById]);
@@ -653,61 +742,80 @@ const App: React.FC = () => {
   [groups]
  );
 
- console.log("This is something", { sortedGroups });
-
  return (
-  <div className="max-w-4xl mx-auto p-6 bg-gray-100 min-h-screen">
+  <div className="max-w-4xl mx-auto p-6 bg-gradient-to-br from-gray-50 to-gray-100 !overflow-hidden">
+   <h1 className="text-3xl font-bold text-gray-800 mb-8 text-center">
+    Filter Conditions
+   </h1>
+
    <DndContext
     sensors={sensors}
     collisionDetection={closestCenter}
     onDragStart={handleDragStart}
+    onDragOver={handleDragOver}
     onDragEnd={handleDragEnd}
-    modifiers={[restrictToVerticalAxis]}
+    modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
    >
-    <SortableContext items={allItems} strategy={verticalListSortingStrategy}>
-     {sortedGroups.map((group) => (
-      <SortableGroup
-       key={group.groupId}
-       group={group}
-       isDropTarget={dragOverGroup === group.groupId}
-      >
-       {group.views.map((view) => (
-        <SortableView key={view.id} view={view} groupEnabled={group.enabled} />
-       ))}
-      </SortableGroup>
-     ))}
-    </SortableContext>
+    {sortedGroups.map((group) => (
+     <DraggableGroup
+      key={group.groupId}
+      group={group}
+      isDraggedOver={dragOverGroup === group.groupId}
+      isDropTarget={dragOverGroup === group.groupId || overId === group.groupId}
+      activeItem={activeItem}
+      dragOverId={overId}
+      activeId={activeId}
+     >
+      {group.views.map((view) => (
+       <DraggableView
+        key={view.id}
+        view={view}
+        isDraggedOver={overId === view.id}
+        isDropTarget={overId === view.id}
+        activeItem={activeItem}
+        dragOverId={overId}
+        activeId={activeId}
+       />
+      ))}
+     </DraggableGroup>
+    ))}
 
     <DragOverlay>
      {activeItem?.type === DRAG_TYPES.VIEW && (
-      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-lg opacity-90">
-       <div className="grid grid-cols-4 gap-3 items-center">
+      <div className="bg-white border-2 border-blue-400 rounded-lg p-4 shadow-2xl transform  transition-all duration-200">
+       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-         <div className="w-3 h-3 bg-red-500 rounded-sm"></div>
-         <span className="text-sm font-medium">
-          {(activeItem.item as View).columnId}
-         </span>
+         <div className="w-3 h-3 bg-blue-500 rounded-sm flex-shrink-0 animate-pulse"></div>
+         <p className="text-gray-800 font-medium text-sm">
+          {activeItem?.item?.view?.columnId}
+         </p>
         </div>
-        <div className="flex items-center gap-2">
-         <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
-         <span className="text-sm">{(activeItem.item as View).columnType}</span>
+        <div className="cursor-grabbing p-2 text-blue-500">
+         <GripVertical size={16} />
         </div>
-        <span className="text-sm">{(activeItem.item as View).operator}</span>
-        <span className="text-sm">{(activeItem.item as View).value}</span>
        </div>
       </div>
      )}
-
      {activeItem?.type === DRAG_TYPES.GROUP && (
-      <div className="border-2 border-gray-200 rounded-lg p-4 bg-gray-50 shadow-lg opacity-90">
-       <h3 className="font-semibold text-purple-600 text-sm">
-        {(activeItem.item as Group).title}
-       </h3>
-       <div className="text-xs text-gray-500 mt-1">
-        {(activeItem.item as Group).views.length} filter(s)
+      <div className="border-2 border-purple-400 rounded-lg p-6 bg-purple-50 shadow-2xl transform  transition-all duration-200">
+       <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-purple-700 text-sm uppercase tracking-wide">
+         {activeItem?.item?.group?.title} (
+         {activeItem?.item?.group?.views.length} items)
+        </h3>
+        <div className="cursor-grabbing p-2 text-purple-500">
+         <GripVertical size={18} />
+        </div>
        </div>
-       <div className="text-xs text-blue-600 mt-1 font-medium">
-        Drop on another group to merge
+       <div className="opacity-50">
+        {activeItem?.item?.group?.views.map((view) => (
+         <div
+          key={view.id}
+          className="bg-white border rounded p-2 mb-2 text-xs"
+         >
+          {view.columnId}
+         </div>
+        ))}
        </div>
       </div>
      )}
