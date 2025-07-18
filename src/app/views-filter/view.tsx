@@ -1,7 +1,7 @@
 import { DRAG_TYPES, useViewsFilterStore } from "@/app/views-filter/context";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { GripVertical } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 export function ViewDropZone({ groupId, position }) {
  const { setNodeRef } = useDroppable({
@@ -30,7 +30,7 @@ export function ViewDropZone({ groupId, position }) {
  }, [activeItem, isActive]);
 
  return (
-  <div className="transition-all duration-300 ease-in-out">
+  <div className="">
    {isActive && flatItems.length > 0 ? (
     <div className="space-y-1 p-1 h-full">
      {flatItems.map((item, index) => (
@@ -52,79 +52,130 @@ export function ViewDropZone({ groupId, position }) {
      ))}
     </div>
    ) : (
-    <div ref={setNodeRef} className="py-1 bg-green-500">
+    <div ref={setNodeRef} className="h-[10px]">
      {/* {`view-drop-${groupId}-${position}`} */}
     </div>
    )}
   </div>
  );
 }
+
 export function DraggableView({
  view,
  groupId,
  position,
+ isLast,
+ viewsInGroup,
 }: {
  view: any;
  groupId: string;
  position: number;
  isLast: boolean;
  isFirst: boolean;
+ viewsInGroup: any[];
 }) {
- const { groups, setActiveViewId } = useViewsFilterStore();
+ const { activeItem } = useViewsFilterStore();
 
- const { attributes, listeners, setNodeRef, transform, isDragging } =
-  useDraggable({
-   id: view.id,
-   data: { type: DRAG_TYPES.VIEW, view },
-  });
+ const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  id: view.id,
+  data: { type: DRAG_TYPES.VIEW, view },
+ });
 
  const { setNodeRef: setDropRef } = useDroppable({
   id: view.id,
   data: { type: DRAG_TYPES.VIEW, view },
  });
 
+ // Memoize the dragged item position to avoid recalculating
+ const draggedItemPosition = useMemo(() => {
+  if (!activeItem?.view) return -1;
+  return viewsInGroup.findIndex((item) => item.id === activeItem.view.id);
+ }, [activeItem?.view, viewsInGroup]);
+
+ // Enhanced logic for drop zone visibility
+ const dropZoneVisibility = useMemo(() => {
+  if (!activeItem?.view) {
+   return { showTop: position === 0, showBottom: true };
+  }
+
+  const isDraggingInThisGroup = draggedItemPosition !== -1;
+  if (!isDraggingInThisGroup) {
+   return { showTop: position === 0, showBottom: true };
+  }
+
+  // Calculate which drop zones should be visible
+  const showTop =
+   position === 0 &&
+   // Don't show top if this is the first item and we're dragging the first item
+   !(draggedItemPosition === 0) &&
+   // Don't show top if this is right after the dragged item
+   !(position === draggedItemPosition + 1);
+
+  const showBottom =
+   // Don't show bottom if this is the dragged item itself
+   !(position === draggedItemPosition) &&
+   // Don't show bottom if this is right before the dragged item
+   !(position === draggedItemPosition - 1) &&
+   // Don't show bottom if this is the last item and we're dragging the last item
+   !(isLast && draggedItemPosition === viewsInGroup.length - 1);
+
+  return { showTop, showBottom };
+ }, [activeItem, draggedItemPosition, position, isLast, viewsInGroup.length]);
+
+ // Memoize the combined ref callback to avoid unnecessary re-renders
+ const combinedRef = useCallback(
+  (node) => {
+   setNodeRef(node);
+   setDropRef(node);
+  },
+  [setNodeRef, setDropRef]
+ );
+
  const style = useMemo(
   () => ({
-   opacity: isDragging ? 0.5 : 1,
+   opacity: isDragging ? 0.4 : 1,
   }),
-  [transform, isDragging]
+  [isDragging]
+ );
+
+ // Memoize drag handle props to avoid object recreation
+ const dragHandleProps = useMemo(
+  () => ({
+   ...attributes,
+   ...listeners,
+   style: { touchAction: "none" },
+  }),
+  [attributes, listeners]
  );
 
  return (
   <>
-   {!isDragging && position === 0 && (
+   {/* Top drop zone */}
+   {!isDragging && dropZoneVisibility.showTop && (
     <ViewDropZone groupId={groupId} position={position} />
    )}
-   <div
-    ref={(node) => {
-     setNodeRef(node);
-     setDropRef(node);
-    }}
-   >
-    {!isDragging && (
-     <div
-      style={style}
-      className={`bg-white border-2 rounded-lg p-4 transition-all duration-300 ease-out h-auto`}
-     >
-      <div className="flex items-center justify-between gap-2">
-       <div className="flex items-center gap-2">
-        {view.id}
-        <p className={`font-medium text-sm text-green-500`}>{view.columnId}</p>
-       </div>
-       <div
-        {...attributes}
-        {...listeners}
-        style={{ touchAction: "none" }}
-        className="cursor-grab active:cursor-grabbing p-2 rounded transition-all duration-200 ease-out text-gray-400 hover:text-gray-600"
-       >
-        <GripVertical size={16} />
-       </div>
+
+   <div ref={combinedRef}>
+    <div style={style} className="bg-white border-2 rounded-lg p-4">
+     <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+       <p className="text-blue-500">{view.id}</p>
+       <p className="font-medium text-sm text-green-500">{view.columnId}</p>
+      </div>
+      <div
+       {...dragHandleProps}
+       className="cursor-grab active:cursor-grabbing p-2 rounded transition-all duration-200 ease-out text-gray-400 hover:text-gray-600"
+      >
+       <GripVertical size={16} />
       </div>
      </div>
-    )}
+    </div>
    </div>
 
-   {!isDragging && <ViewDropZone groupId={groupId} position={position + 1} />}
+   {/* Bottom drop zone */}
+   {!isDragging && dropZoneVisibility.showBottom && (
+    <ViewDropZone groupId={groupId} position={position + 1} />
+   )}
   </>
  );
 }

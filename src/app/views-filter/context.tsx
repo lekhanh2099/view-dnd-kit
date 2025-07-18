@@ -250,7 +250,7 @@ const initialContextData = [
   type: "FILTER",
   views: [
    {
-    id: "view-6",
+    id: "view-8",
     columnId: "Column Y",
     groupId: "group-4",
     values: null,

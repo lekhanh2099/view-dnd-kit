@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useMemo, useCallback } from "react";
 import {
  DndContext,
  closestCenter,
@@ -18,8 +18,8 @@ import {
  useViewsFilterStore,
  ViewsFilterProvider,
 } from "@/app/views-filter/context";
-import { DraggableGroup, GroupDropZone } from "@/app/views-filter/group";
-import { DraggableView } from "@/app/views-filter/view";
+import { DraggableGroup } from "@/app/views-filter/group";
+import { DraggableView, ViewDropZone } from "@/app/views-filter/view";
 import { ViewFilterOverlay } from "@/app/views-filter/overlay";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 
@@ -36,14 +36,12 @@ export default function FilterViewList() {
   setActiveItem,
   setIsDragging,
   isDragging,
-  overActiveId,
-  activeItem,
  } = useViewsFilterStore();
 
  const sensors = useSensors(
   useSensor(PointerSensor, {
    activationConstraint: {
-    distance: 0,
+    distance: 10,
    },
   }),
   useSensor(KeyboardSensor, {
@@ -139,8 +137,6 @@ export default function FilterViewList() {
     (over?.id.toString().startsWith("view-drop-") ||
      over?.id.toString().startsWith("group-drop-"))
    ) {
-    console.log("This is something", { overId: over?.id, overActiveId });
-
     setOverActiveId(over?.id || null);
     return;
    }
@@ -281,7 +277,7 @@ export default function FilterViewList() {
   <div className="h-full w-full max-w-4xl mx-auto overflow-hidden">
    <ViewsFilterProvider initialGroups={memoizedGroups}>
     <div
-     className="h-[1000px] pr-2 relative py-5"
+     className="h-[900px] pr-2 relative py-5"
      style={{
       overflowY: !isDragging ? "auto" : "hidden",
       touchAction: isDragging ? "none" : "auto",
@@ -312,6 +308,7 @@ export default function FilterViewList() {
             position={viewIndex}
             isLast={viewIndex === group.views.length - 1}
             isFirst={viewIndex === 0}
+            viewsInGroup={group.views}
            />
           </React.Fragment>
          ))}
