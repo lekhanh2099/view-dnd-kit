@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useRef, useEffect } from "react";
 import {
  DndContext,
  closestCenter,
@@ -41,7 +41,7 @@ export default function FilterViewList() {
  const sensors = useSensors(
   useSensor(PointerSensor, {
    activationConstraint: {
-    distance: 10,
+    distance: 16,
    },
   }),
   useSensor(KeyboardSensor, {
@@ -128,7 +128,16 @@ export default function FilterViewList() {
   },
   [setActiveItem, setOverActiveId, setIsDragging]
  );
+ const timeoutRef = useRef(null);
 
+ // Optional: Clear timeout on component unmount
+ useEffect(() => {
+  return () => {
+   if (timeoutRef.current) {
+    clearTimeout(timeoutRef.current);
+   }
+  };
+ }, []);
  const handleDragOver = useCallback(
   (event) => {
    const { over } = event;
@@ -137,7 +146,16 @@ export default function FilterViewList() {
     (over?.id.toString().startsWith("view-drop-") ||
      over?.id.toString().startsWith("group-drop-"))
    ) {
-    setOverActiveId(over?.id || null);
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+     clearTimeout(timeoutRef.current);
+    }
+
+    // Set new timeout for 2 seconds
+    timeoutRef.current = setTimeout(() => {
+     setOverActiveId(over?.id || null);
+    }, 190);
+
     return;
    }
   },
@@ -277,7 +295,7 @@ export default function FilterViewList() {
   <div className="h-full w-full max-w-4xl mx-auto overflow-hidden">
    <ViewsFilterProvider initialGroups={memoizedGroups}>
     <div
-     className="h-[900px] pr-2 relative py-5"
+     className="h-[900px] pr-2 relative"
      style={{
       overflowY: !isDragging ? "auto" : "hidden",
       touchAction: isDragging ? "none" : "auto",
@@ -290,7 +308,7 @@ export default function FilterViewList() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
-      modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
+      //   modifiers={[restrictToVerticalAxis]}
       measuring={{
        droppable: {
         strategy: MeasuringStrategy.Always,

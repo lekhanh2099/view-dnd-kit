@@ -10,46 +10,54 @@ import { GripVertical } from "lucide-react";
 // Drag overlay components
 export const ViewDragOverlay = ({ view }) => {
  return (
-  <div className="bg-white border-2 rounded-lg p-4 transition-all duration-300 ease-out h-auto">
-   <div className="flex items-center justify-between">
-    <div className="flex items-center gap-2">
-     <div className={`w-3 h-3 rounded-sm flex-shrink-0`}></div>
-     <p className={`font-medium text-sm text-green-500`}>{view.columnId}</p>
-    </div>
-    <div
-     style={{ touchAction: "none" }}
-     className="cursor-grab active:cursor-grabbing p-2 rounded transition-all duration-200 ease-out text-gray-400 hover:text-gray-600"
-    >
-     <GripVertical size={16} />
-    </div>
+  <div className="flex items-center justify-between gap-2 bg-white border-2 rounded-lg p-2 relative">
+   <div className="flex items-center gap-2">
+    <div className="w-3 h-3 rounded-sm flex-shrink-0 bg-green-500"></div>
+    <p className="font-medium text-sm text-green-800">
+     {view.columnId || "Unknown Column"}
+    </p>
+   </div>
+   <div className="cursor-grabbing p-2 rounded text-gray-400 hover:text-gray-600">
+    <GripVertical size={16} />
    </div>
   </div>
  );
 };
 
-export const GroupDragOverlay = ({ group }) => (
- <div className="border-2 border-purple-400 rounded-lg p-6 bg-purple-50 shadow-2xl transform opacity-20">
-  <div className="space-y-2">
-   {group.views.map((view) => (
-    <div
-     key={view.id}
-     className="bg-white border border-purple-200 rounded p-2"
-    >
-     <div className="flex items-center gap-2">
-      <div className="w-2 h-2 rounded-sm bg-purple-400"></div>
-      <p className="text-xs text-purple-700">{view.columnId}</p>
-     </div>
+export const GroupDragOverlay = ({ group }) => {
+ return (
+  <div className="border-2 rounded-lg p-6 bg-gray-50 transition-all duration-300 ease-out">
+   <div className="flex items-center mb-4 justify-end">
+    <div className="cursor-grabbing rounded text-gray-400 hover:text-gray-600">
+     <GripVertical size={18} />
     </div>
-   ))}
+   </div>
+   <div className="space-y-2">
+    {group?.views?.map((view, index) => (
+     <div
+      key={`${view.id}-${index}`}
+      className="bg-white/90 border-2 border-green-400 rounded-lg p-2 transition-opacity duration-200 ease-out shadow-sm"
+     >
+      <div className="flex items-center justify-between">
+       <div className="flex items-center gap-2">
+        <div className="w-3 h-3 rounded-sm flex-shrink-0 bg-green-500"></div>
+        <p className="font-medium text-sm text-green-800">
+         {view.columnId || "Unknown Column"}
+        </p>
+       </div>
+      </div>
+     </div>
+    ))}
+   </div>
   </div>
- </div>
-);
+ );
+};
 
 export function ViewFilterOverlay() {
- const { activeItem } = useViewsFilterStore();
+ const { activeItem, isDragging } = useViewsFilterStore();
 
  return (
-  <div className="relative">
+  <div className="relative z-[9999999]">
    <DragOverlay modifiers={[restrictToWindowEdges]}>
     {activeItem?.type === DRAG_TYPES.VIEW && (
      <ViewDragOverlay view={activeItem?.view} />

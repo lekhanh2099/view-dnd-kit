@@ -35,24 +35,18 @@ export function ViewDropZone({ groupId, position }) {
     <div className="space-y-1 p-1 h-full">
      {flatItems.map((item, index) => (
       <div
+       className="flex items-center justify-between gap-2 bg-white border-2 rounded-lg p-2"
        key={`${item.id}-${index}`}
-       className="bg-white/90 border-2 border-green-400 rounded-lg p-4 transition-opacity duration-200 ease-out shadow-sm"
-       style={{ animation: "fadeSlideIn 200ms ease-out" }}
       >
-       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-         <div className="w-3 h-3 rounded-sm flex-shrink-0 bg-green-500"></div>
-         <p className="font-medium text-sm text-green-800">
-          {item.columnId || "Unknown Column"}
-         </p>
-        </div>
-        <div className="text-xs text-green-600 opacity-75">Preview</div>
+       <div className="flex items-center gap-2">
+        <p className="text-blue-500">{item.id}</p>
+        <p className="font-medium text-sm text-green-500">{item.columnId}</p>
        </div>
       </div>
      ))}
     </div>
    ) : (
-    <div ref={setNodeRef} className="h-[10px]">
+    <div ref={setNodeRef} className="p-1">
      {/* {`view-drop-${groupId}-${position}`} */}
     </div>
    )}
@@ -86,13 +80,11 @@ export function DraggableView({
   data: { type: DRAG_TYPES.VIEW, view },
  });
 
- // Memoize the dragged item position to avoid recalculating
  const draggedItemPosition = useMemo(() => {
   if (!activeItem?.view) return -1;
   return viewsInGroup.findIndex((item) => item.id === activeItem.view.id);
  }, [activeItem?.view, viewsInGroup]);
 
- // Enhanced logic for drop zone visibility
  const dropZoneVisibility = useMemo(() => {
   if (!activeItem?.view) {
    return { showTop: position === 0, showBottom: true };
@@ -103,26 +95,19 @@ export function DraggableView({
    return { showTop: position === 0, showBottom: true };
   }
 
-  // Calculate which drop zones should be visible
   const showTop =
    position === 0 &&
-   // Don't show top if this is the first item and we're dragging the first item
    !(draggedItemPosition === 0) &&
-   // Don't show top if this is right after the dragged item
    !(position === draggedItemPosition + 1);
 
   const showBottom =
-   // Don't show bottom if this is the dragged item itself
    !(position === draggedItemPosition) &&
-   // Don't show bottom if this is right before the dragged item
    !(position === draggedItemPosition - 1) &&
-   // Don't show bottom if this is the last item and we're dragging the last item
    !(isLast && draggedItemPosition === viewsInGroup.length - 1);
 
   return { showTop, showBottom };
  }, [activeItem, draggedItemPosition, position, isLast, viewsInGroup.length]);
 
- // Memoize the combined ref callback to avoid unnecessary re-renders
  const combinedRef = useCallback(
   (node) => {
    setNodeRef(node);
@@ -134,11 +119,13 @@ export function DraggableView({
  const style = useMemo(
   () => ({
    opacity: isDragging ? 0.4 : 1,
+   marginBottom: isDragging ? 8 : 0,
+   marginTop: isDragging ? 8 : 0,
+   zIndex: isDragging ? 10000 : 0,
   }),
   [isDragging]
  );
 
- // Memoize drag handle props to avoid object recreation
  const dragHandleProps = useMemo(
   () => ({
    ...attributes,
@@ -150,29 +137,27 @@ export function DraggableView({
 
  return (
   <>
-   {/* Top drop zone */}
    {!isDragging && dropZoneVisibility.showTop && (
     <ViewDropZone groupId={groupId} position={position} />
    )}
 
-   <div ref={combinedRef}>
-    <div style={style} className="bg-white border-2 rounded-lg p-4">
-     <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2">
-       <p className="text-blue-500">{view.id}</p>
-       <p className="font-medium text-sm text-green-500">{view.columnId}</p>
-      </div>
-      <div
-       {...dragHandleProps}
-       className="cursor-grab active:cursor-grabbing p-2 rounded transition-all duration-200 ease-out text-gray-400 hover:text-gray-600"
-      >
-       <GripVertical size={16} />
-      </div>
-     </div>
+   <div
+    className="flex items-center justify-between gap-2 bg-white border-2 rounded-lg p-2 relative"
+    style={style}
+    ref={combinedRef}
+   >
+    <div className="flex items-center gap-2">
+     <p className="text-blue-500">{view.id}</p>
+     <p className="font-medium text-sm text-green-500">{view.columnId}</p>
+    </div>
+    <div
+     {...dragHandleProps}
+     className="cursor-grab active:cursor-grabbing p-2 rounded  text-gray-400 hover:text-gray-600"
+    >
+     <GripVertical size={16} />
     </div>
    </div>
 
-   {/* Bottom drop zone */}
    {!isDragging && dropZoneVisibility.showBottom && (
     <ViewDropZone groupId={groupId} position={position + 1} />
    )}
