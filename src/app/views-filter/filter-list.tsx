@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useCallback, useRef, useEffect } from "react";
+import React, { useMemo, useCallback } from "react";
 import {
  DndContext,
  closestCenter,
@@ -10,16 +10,12 @@ import {
  MeasuringStrategy,
 } from "@dnd-kit/core";
 import {
- restrictToVerticalAxis,
- restrictToWindowEdges,
-} from "@dnd-kit/modifiers";
-import {
  DRAG_TYPES,
  useViewsFilterStore,
  ViewsFilterProvider,
 } from "@/app/views-filter/context";
 import { DraggableGroup } from "@/app/views-filter/group";
-import { DraggableView, ViewDropZone } from "@/app/views-filter/view";
+import { DraggableView } from "@/app/views-filter/view";
 import { ViewFilterOverlay } from "@/app/views-filter/overlay";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 
@@ -128,16 +124,7 @@ export default function FilterViewList() {
   },
   [setActiveItem, setOverActiveId, setIsDragging]
  );
- const timeoutRef = useRef(null);
 
- // Optional: Clear timeout on component unmount
- useEffect(() => {
-  return () => {
-   if (timeoutRef.current) {
-    clearTimeout(timeoutRef.current);
-   }
-  };
- }, []);
  const handleDragOver = useCallback(
   (event) => {
    const { over } = event;
@@ -146,17 +133,7 @@ export default function FilterViewList() {
     (over?.id.toString().startsWith("view-drop-") ||
      over?.id.toString().startsWith("group-drop-"))
    ) {
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-     clearTimeout(timeoutRef.current);
-    }
-
-    // Set new timeout for 2 seconds
-    timeoutRef.current = setTimeout(() => {
-     setOverActiveId(over?.id || null);
-    }, 190);
-
-    return;
+    setOverActiveId(over?.id || null);
    }
   },
   [setOverActiveId]
@@ -308,7 +285,6 @@ export default function FilterViewList() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
-      //   modifiers={[restrictToVerticalAxis]}
       measuring={{
        droppable: {
         strategy: MeasuringStrategy.Always,
