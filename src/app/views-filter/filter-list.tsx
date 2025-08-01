@@ -18,7 +18,6 @@ import { DraggableGroup } from "@/app/views-filter/group";
 import { DraggableView } from "@/app/views-filter/view";
 import { ViewFilterOverlay } from "@/app/views-filter/overlay";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-
 export default function FilterViewList() {
  const {
   createGroupWithView,
@@ -32,12 +31,13 @@ export default function FilterViewList() {
   setActiveItem,
   setIsDragging,
   isDragging,
+  overActiveId,
  } = useViewsFilterStore();
 
  const sensors = useSensors(
   useSensor(PointerSensor, {
    activationConstraint: {
-    distance: 16,
+    distance: 8,
    },
   }),
   useSensor(KeyboardSensor, {
@@ -272,7 +272,7 @@ export default function FilterViewList() {
   <div className="h-full w-full max-w-4xl mx-auto overflow-hidden">
    <ViewsFilterProvider initialGroups={memoizedGroups}>
     <div
-     className="h-[900px] pr-2 relative"
+     className="h-[900px] pr-2 relative overflow-y-auto"
      style={{
       overflowY: !isDragging ? "auto" : "hidden",
       touchAction: isDragging ? "none" : "auto",
@@ -287,7 +287,7 @@ export default function FilterViewList() {
       onDragCancel={handleDragCancel}
       measuring={{
        droppable: {
-        strategy: MeasuringStrategy.Always,
+        strategy: MeasuringStrategy.WhileDragging,
        },
       }}
      >

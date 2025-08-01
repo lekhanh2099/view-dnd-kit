@@ -7,12 +7,12 @@ import { DragOverlay } from "@dnd-kit/core";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { GripVertical } from "lucide-react";
 
-// Drag overlay components
 export const ViewDragOverlay = ({ view }) => {
  return (
   <div className="flex items-center justify-between gap-2 bg-white border-2 rounded-lg p-2 relative">
    <div className="flex items-center gap-2">
     <div className="w-3 h-3 rounded-sm flex-shrink-0 bg-green-500"></div>
+    <p className="text-blue-500">{view.id}</p>
     <p className="font-medium text-sm text-green-800">
      {view.columnId || "Unknown Column"}
     </p>
@@ -54,7 +54,7 @@ export const GroupDragOverlay = ({ group }) => {
 };
 
 export function ViewFilterOverlay() {
- const { activeItem, isDragging } = useViewsFilterStore();
+ const { activeItem } = useViewsFilterStore();
 
  return (
   <div className="relative z-[9999999]">

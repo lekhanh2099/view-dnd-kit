@@ -22,18 +22,19 @@ export function GroupDropZone({ position }: { position: number }) {
  const view = useMemo(() => {
   return isViewDrag ? activeItem?.view : [];
  }, [activeItem]);
+
  const group = useMemo(() => {
   return isGroupDrag ? activeItem?.group : {};
  }, [activeItem]);
 
  return (
-  <div className="">
-   {isActive ? (
-    <div className="space-y-1 p-1 h-full">
+  <div ref={setNodeRef} className="">
+   {isActive && (
+    <div className="space-y-1 h-full">
      {group && isGroupDrag && (
       <div className="border-2 rounded-lg p-6 bg-gray-50 transition-all duration-300 ease-out">
        <div className="flex items-center mb-4 justify-end">
-        <div className="cursor-grab active:cursor-grabbing p-2 rounded  text-gray-400 hover:text-gray-600">
+        <div className="cursor-grab active:cursor-grabbing p-2 rounded text-gray-400 hover:text-gray-600">
          <GripVertical size={18} />
         </div>
        </div>
@@ -60,8 +61,8 @@ export function GroupDropZone({ position }: { position: number }) {
      {view && isViewDrag && (
       <div className="border-2 rounded-lg p-2 space-y-2 bg-gray-50">
        <div className="flex items-center mb-4 justify-end">
-        <p className="text-blue-500"> {group.groupId}</p>
-        <div className="cursor-grab active:cursor-grabbing p-2 rounded  text-gray-400 hover:text-gray-600">
+        <p className="text-blue-500">{group.groupId}</p>
+        <div className="cursor-grab active:cursor-grabbing p-2 rounded text-gray-400 hover:text-gray-600">
          <GripVertical size={18} />
         </div>
        </div>
@@ -74,12 +75,11 @@ export function GroupDropZone({ position }: { position: number }) {
       </div>
      )}
     </div>
-   ) : (
-    <div ref={setNodeRef} className={"p-1"}></div>
    )}
   </div>
  );
 }
+
 export function DraggableGroup({
  group,
  children,
@@ -102,18 +102,10 @@ export function DraggableGroup({
  const { setNodeRef: setDropRef } = useDroppable({
   id: group.groupId,
   data: { type: DRAG_TYPES.GROUP, group },
+  disabled:
+   activeItem?.type === DRAG_TYPES.GROUP &&
+   activeItem?.group?.groupId === group.groupId,
  });
-
- const lengthViewInGroup = useMemo(() => {
-  return (
-   groups.filter((g) => g.groupId === activeItem?.view?.groupId)[0]?.views
-    ?.length || 0
-  );
- }, [activeItem, groups]);
-
- const hideItem = useMemo(() => {
-  return lengthViewInGroup === 1 && activeItem?.view?.groupId === group.groupId;
- }, [lengthViewInGroup, activeItem?.view?.groupId, group.groupId]);
 
  const draggedGroupPosition = useMemo(() => {
   if (!activeItem?.group) return -1;
@@ -121,27 +113,45 @@ export function DraggableGroup({
  }, [activeItem?.group, groups]);
 
  const dropZoneVisibility = useMemo(() => {
-  if (!activeItem?.group) {
+  if (!activeItem) {
    return { showTop: position === 0, showBottom: true };
   }
 
-  const isDraggingGroup = draggedGroupPosition !== -1;
-  if (!isDraggingGroup) {
+  if (activeItem.type === DRAG_TYPES.VIEW) {
    return { showTop: position === 0, showBottom: true };
   }
 
-  const showTop =
-   position === 0 &&
-   !(draggedGroupPosition === 0) &&
-   !(position === draggedGroupPosition + 1);
+  if (activeItem.type === DRAG_TYPES.GROUP) {
+   const isDraggingGroup = draggedGroupPosition !== -1;
+   if (!isDraggingGroup) {
+    return { showTop: position === 0, showBottom: true };
+   }
 
-  const showBottom =
-   !(position === draggedGroupPosition) &&
-   !(position === draggedGroupPosition - 1) &&
-   !(isLast && draggedGroupPosition === groups.length - 1);
+   const isDraggingSelf = activeItem.group?.groupId === group.groupId;
 
-  return { showTop, showBottom };
- }, [activeItem, draggedGroupPosition, position, isLast, groups.length]);
+   const showTop =
+    position === 0 &&
+    !(draggedGroupPosition === 0) &&
+    !(position === draggedGroupPosition + 1) &&
+    !isDraggingSelf;
+   const showBottom =
+    !(position === draggedGroupPosition) &&
+    !(position === draggedGroupPosition - 1) &&
+    !(isLast && draggedGroupPosition === groups.length - 1) &&
+    !isDraggingSelf;
+
+   return { showTop, showBottom };
+  }
+
+  return { showTop: position === 0, showBottom: true };
+ }, [
+  activeItem,
+  draggedGroupPosition,
+  position,
+  isLast,
+  groups.length,
+  group.groupId,
+ ]);
 
  const combinedRef = useCallback(
   (node) => {
@@ -153,9 +163,8 @@ export function DraggableGroup({
 
  const style = useMemo(
   () => ({
-   opacity: isDragging ? 0 : 1,
-   marginBottom: isDragging ? 8 : 0,
-   marginTop: isDragging ? 8 : 0,
+   opacity: isDragging ? 0.4 : 1,
+
    zIndex: isDragging ? 10000 : 0,
   }),
   [isDragging]
@@ -170,31 +179,37 @@ export function DraggableGroup({
   [attributes, listeners]
  );
 
+ // Don't show the group as a drop target when dragging itself
+ const isDropDisabled =
+  activeItem?.type === DRAG_TYPES.GROUP &&
+  activeItem?.group?.groupId === group.groupId;
+
  return (
   <>
-   {!isDragging && dropZoneVisibility.showTop && (
+   {!isDragging && activeItem && dropZoneVisibility.showTop && (
     <GroupDropZone position={position} />
    )}
 
-   <div ref={combinedRef}>
-    <div
-     style={style}
-     className="border-2 rounded-lg px-2 space-y-2 bg-gray-50 relative"
-    >
-     <div className="flex items-center justify-end text-pink-400">
-      {group.groupId}
-      <div
-       {...dragHandleProps}
-       className="cursor-grab active:cursor-grabbing p-2 rounded  text-gray-400 hover:text-gray-600"
-      >
-       <GripVertical size={18} />
-      </div>
+   <div
+    className={`border-2 rounded-lg px-2 bg-gray-50 relative my-2 ${
+     isDropDisabled ? "opacity-50 pointer-events-none" : ""
+    }`}
+    style={style}
+    ref={combinedRef}
+   >
+    <div className="flex items-center justify-end text-pink-400">
+     {group.groupId}
+     <div
+      {...dragHandleProps}
+      className="cursor-grab active:cursor-grabbing p-2 rounded  text-gray-400 hover:text-gray-600"
+     >
+      <GripVertical size={18} />
      </div>
-     <div>{children}</div>
     </div>
+    <div>{children}</div>
    </div>
 
-   {!isDragging && dropZoneVisibility.showBottom && (
+   {!isDragging && activeItem && dropZoneVisibility.showBottom && (
     <GroupDropZone position={position + 1} />
    )}
   </>
